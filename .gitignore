@@ -26,6 +26,11 @@ ROADMAP.md
 # Vendored MCP server — runtime deps are installed locally, never committed
 vendor/**/node_modules/
 
+# AgentBus build output and repository-local runtime state
+node_modules/
+dist/
+.agentbus/
+
 # Obsidian local workspace state (vault note tracking is your call; cruft isn't)
 memory/**/.obsidian/workspace*.json
 memory/**/.obsidian/cache

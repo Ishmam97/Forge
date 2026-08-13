@@ -2,7 +2,7 @@
 type: feature
 status: active
 created: '2026-06-26'
-updated: '2026-06-26'
+updated: '2026-08-13'
 tags:
   - feature
   - mcp
@@ -15,7 +15,7 @@ related:
 ---
 # Cross-Agent Collaboration MCP
 
-A local-first coordination substrate that lets heterogeneous coding agents (Claude Code, Codex, OpenCode, Kimi, …) share a task board, message each other, and collaborate on one repo without a human relaying state between terminals. Brainstormed 2026-06-26; sharpened by a multi-agent review (see [[Cross-Agent MCP - Multi-Agent Review Consensus]]). Pre-PRD.
+A local-first coordination substrate that lets heterogeneous coding agents (Claude Code, Codex, OpenCode, Kimi, …) share a task board, message each other, and collaborate on one repo without a human relaying state between terminals. Brainstormed 2026-06-26; sharpened by a multi-agent review (see [[Cross-Agent MCP - Multi-Agent Review Consensus]]); PRD drafted 2026-08-13 and ready for architecture.
 
 **Working name:** unresolved. `AgentBus` (provisional) reads as a message-transport layer, but the architecture's real strength is *shared state + isolated workspaces* — candidates: `WorktreeHub`, `RepoCrew`, `DevBoard`, `WorkBus`.
 
@@ -75,26 +75,32 @@ Review-driven corrections (fold into the design):
 
 Collect-now, optimize-later. A **self-reporting** usage tool bookends each task (checkpoint at claim, checkpoint at done; the delta ≈ task cost) purely to prove the schema. Registry carries capability tags + cost tier + human-declared budget/limit as *schema*. **No** hard routing/budgeting logic yet — cross-agent telemetry is too inaccurate this phase. `suggest_assignee` (deterministic, over registry data) is designed-for, deferred.
 
-## MVP success criteria (revised, post-review)
+## MVP success criteria (revised, post-PRD)
 
 The testable vertical slice:
 
-1. Start the core daemon in a repo (`agentbus serve`).
-2. Start Claude Code (Lead) + Codex (Worker); both register via MCP handshake.
-3. Lead decomposes a goal into **2 disjoint tasks**.
-4. Human watches them appear live in the thin UI.
-5. Worker blocking-polls, **atomic-claims** a task, receives a **core-generated worktree path**.
-6. Worker makes a code change, posts a progress message, marks the task `merge_ready` with test results attached.
-7. Lead picks up the review state and approves.
-8. UI reflects all status changes, rough token usage, and live event logs — **no human copy-paste of context or terminal commands**.
+1. Start the core daemon and thin UI in a repo (`agentbus serve`).
+2. Start one Claude Code session (Lead/Reviewer) and two Codex sessions (Workers); all three register through the MCP handshake using project-configured, vendor-neutral role bindings.
+3. The Lead decomposes a goal into **2 disjoint tasks** with complete context, acceptance criteria, and file scopes.
+4. Both Workers bounded-long-poll, each **atomic-claims** one task, and each receives a distinct **core-generated worktree path**.
+5. Both Workers change code concurrently, post progress, renew leases, attach test evidence and paired self-reported usage checkpoints, and mark their tasks `merge_ready`.
+6. The Lead reviews both tasks and moves approved work to `awaiting_human_approval`; Lead approval does not merge code.
+7. The human explicitly approves each merge in the UI; the core attempts and records the merges sequentially. Conflicts block and alert, and a human-resolved conflict can be retried through the UI.
+8. The UI reflects sessions, task states, lease health, messages, review/merge gates, rough usage, and the live event log — **no human copy-paste, wake-up/status commands, or manual worktree setup during execution**.
 
 ## Open questions
 
-- Working name (candidates above). #open-question
-- Token-checkpoint accuracy: self-report (rough) vs. a harness hook reading real transcript usage (accurate, per-agent). Which agents get the accurate path first.
-- Merge-conflict UX beyond "block + alert": does the human resolve in the worktree, or hand back to an agent with the conflict markers as context?
-- Heartbeat mechanism for the blocking long-poll vs. lease-expiry interplay.
-- How role→agent binding is declared (config file? UI? lead-agent proposal?) and overridden mid-session.
+- Working name (candidates above). `AgentBus` remains the non-blocking codename. #open-question
+
+## Product decisions resolved in the PRD (2026-08-13)
+
+- Proving topology: one Claude Code Lead/Reviewer plus two Codex Worker sessions.
+- Merge authority: Lead review is followed by explicit human approval before the core attempts a merge.
+- Role binding: project configuration supplies initial vendor-neutral bindings; the human can override them through the UI.
+- Lease expiry: clean worktrees requeue automatically; worktrees containing changes block until human reassignment.
+- Conflict recovery: the human resolves externally and requests a validated retry through the UI.
+- Platforms: Linux and macOS for MVP; Windows deferred.
+- Token checkpoints: self-report only for MVP; accurate telemetry remains out of scope.
 
 ## Non-goals (MVP)
 
@@ -107,16 +113,17 @@ The testable vertical slice:
 
 ## Sizing & next step
 
-Large→Complex by the scaffold's sizing (new cross-system architecture; real uncertainty in activation, merge, telemetry). Natural path: brief → PRD → architecture → `/challenge` → stories → `/implement`. Brief artifact now exists (see below); PRD blocked on the activation spike.
+Large→Complex by the scaffold's sizing (new cross-system architecture spanning coordination state, MCP, Git, leases, and a live UI). Natural path: brief → PRD → architecture → `/challenge` → stories → `/implement`. The brief and PRD now exist; architecture is the next artifact.
 
 ## Artifacts
 
-- Project brief: [`docs/briefs/cross-agent-collaboration-mcp.md`](../../docs/briefs/cross-agent-collaboration-mcp.md) — synthesized 2026-06-26. Adds competitive landscape, JTBD, value hypothesis, quantified success metrics. **Verdict: not yet PRD-ready** — blocked on an activation-model feasibility spike (below); the brief content itself is complete.
+- Project brief: [`docs/briefs/cross-agent-collaboration-mcp.md`](../../docs/briefs/cross-agent-collaboration-mcp.md) — synthesized 2026-06-26 and reconciled after the activation spike.
+- PRD: [`docs/prd/cross-agent-collaboration-mcp.md`](../../docs/prd/cross-agent-collaboration-mcp.md) — drafted 2026-08-13. **Verdict: ready for architecture**; final product naming remains open but non-blocking.
 
 ## Net-new from the brief (2026-06-26)
 
 - **Competitive landscape mapped** → [[Parallel Coding-Agent Orchestration Landscape]]. Closest incumbent: **ReverbCode** (23-adapter daemon, worktree-per-session, SCM-observer *nudges* agents — not a shared board). Native **Claude Code Agent Teams** is the "why not built-in" answer: single-vendor, report-back-only.
-- **Activation model at serious risk** → [[MCP Long-Running Tool Call Activation Problem]]. Current MCP clients hard-timeout held-open tool calls (Claude Code keepalive bug #58687 closed "not planned"); MCP's sanctioned long-running pattern is the **poll-based Tasks** primitive, not a blocking call. **Spike before architecture locks** — the PRD-blocking item. May force pivoting the locked blocking-long-poll decision to short-poll or MCP Tasks. #open-question
+- **Activation model verified for the proving clients** → [[MCP Long-Running Tool Call Activation Problem]]. A spike showed held-open calls surviving at least 130 seconds on Claude Code 2.1.193 and Codex 0.142.0, so the MVP adopts configurable bounded long-poll. Architecture must retain cancellation/retry controls and end-to-end coverage for repeated handoffs; other clients remain unverified.
 
 ## Related
 

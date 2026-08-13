@@ -1,6 +1,6 @@
 # Project Brief: Cross-Agent Collaboration MCP (working title — see naming risk)
 
-**Status:** Ready for PRD
+**Status:** PRD drafted — ready for architecture
 **Author:** Ishmam
 **Date:** 2026-06-26
 
@@ -75,7 +75,7 @@ Leading indicators sized for a personal dev-tool MVP (instrument the daemon's ev
 
 **Feasibility risk that could invalidate the core activation model (highest priority — researched):**
 
-- **✅ Blocking long-poll activation — RESOLVED BY SPIKE (2026-06-26).** A spike (probe MCP server + headless **Claude Code 2.1.193** & **Codex 0.142.0**) found a held-open `block_for(130s)` returns **cleanly on both clients** — default settings, no progress needed — and both agents park on the call correctly. The documented risk below **did not reproduce**; the recommended model is **bounded long-poll** (server holds the call, returns work-or-empty at a conservative bound, agent re-calls). Method + data: `../learnings/2026-06-26-mcp-blocking-tool-call-activation.md`. _Original concern, preserved for the record:_ Real MCP clients were reported to enforce hard tool-call timeouts that a held-open call would hit: Cursor times out `tools/call` at ~60s with no config; and a filed Claude Code bug (issue #58687) shows the client times out long-running MCP calls *even when the server sends progress notifications*, because Claude Code does not pass `progressToken` / `resetTimeoutOnProgress` — and that issue was **closed as "not planned," with no client-side workaround.** `MCP_TOOL_TIMEOUT` is an *idle-between-progress* timeout, not a wall-clock cap, and is moot if progress isn't wired through. **Implication:** an agent parking on a blocking tool call for minutes will likely be killed by its own client, not the server. Two credible pivots, both citable: **(a)** redesign activation as **short-poll** — a fast-returning `get_my_next_task()` the agent loops with a brief sleep (this is what the incumbent ReverbCode effectively does via nudges); or **(b)** adopt the MCP **Tasks** primitive — "call-now, fetch-later," `tools/call` returns a task handle and the client drives `tasks/get` polling — which is *exactly* the protocol's sanctioned answer to long-running work, but it was experimental in spec `2025-11-25` and is moving to an **extension** in the `2026-07-28` release candidate, so client support (esp. Codex) is unproven. **This assumption must be spiked before architecture locks.** Sources: [Claude Code MCP timeout bug #58687](https://github.com/anthropics/claude-code/issues/58687), [Cursor 60s MCP timeout](https://forum.cursor.com/t/agent-acp-mcp-tools-call-times-out-at-60s-with-no-way-to-configure-it/163925), [MCP Tasks spec](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/tasks), [MCP 2026-07-28 RC](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/).
+- **✅ Blocking long-poll activation — RESOLVED BY SPIKE (2026-06-26).** A probe MCP server and headless **Claude Code 2.1.193** and **Codex 0.142.0** clients completed held-open `block_for(130s)` calls cleanly with default settings and no progress notifications. Both agents parked on the call as instructed. The MVP adopts **configurable bounded long-poll**: the server returns work or an explicit empty result at a conservative bound, and the supported activation contract re-calls without human intervention. Architecture must specify cancellation, retry, and version-specific compatibility behavior, and the end-to-end suite must verify repeated handoffs rather than only one prompted wait. Method, limitations, and data: [`../learnings/2026-06-26-mcp-blocking-tool-call-activation.md`](../learnings/2026-06-26-mcp-blocking-tool-call-activation.md).
 - **Will an arbitrary agent reliably "park" and resume on the next task?** Even if the transport tolerates a long/poll call, it's unproven that a general coding-agent CLI will *behaviorally* sit on `wait_for_my_next_task()` and then act on the returned task rather than ending its turn, summarizing, or asking the human. The activation contract may need per-agent prompt/profile scaffolding (fits the adapter model) — flag as part of the spike.
 
 **Feasibility — agent-client maturity (researched, lower risk):**
@@ -83,13 +83,13 @@ Leading indicators sized for a personal dev-tool MVP (instrument the daemon's ev
 - **Codex MCP-client maturity: looks adequate.** Codex CLI supports MCP servers over both **STDIO and Streamable HTTP**, configured in `~/.codex/config.toml` (or per-project `.codex/config.toml`) and managed via `codex mcp`, shared between CLI and IDE. So Codex-as-Worker connecting to the core's MCP adapter is plausible. **Unknown:** whether Codex honors the *same* timeout/keepalive semantics (ties directly to the blocking-poll risk) and how it behaves on long calls. Source: [Codex MCP docs](https://developers.openai.com/codex/mcp).
 - **OpenCode / Kimi / other CLIs:** out of the MVP test matrix, but the agent-agnostic claim rests on their MCP-client maturity; ReverbCode listing adapters for them is encouraging but not a guarantee they tolerate this design's activation pattern. Validate per-agent as adapters are added.
 
-**Product / design unknowns (consolidated from the feature note's open questions):**
+**Product decisions and remaining architecture work:**
 
-- **Working name** — unresolved; "AgentBus" undersells the shared-state strength. Candidates: WorktreeHub / RepoCrew / DevBoard / WorkBus. **User-only decision.**
-- **Role→agent binding mechanism** — config file vs. UI vs. lead-proposed-human-approved, and how it's overridden mid-session. Must stay vendor-neutral per the agent-agnostic decision.
-- **Merge-conflict UX after a block** — does the human resolve in the worktree, or is the conflict handed back to an agent with the markers as context? (We've ruled out autonomous LLM conflict resolution; the *post-block* workflow is open.)
-- **Heartbeat ↔ lease ↔ long-poll interplay** — how a heartbeat coexists with a (possibly short-poll) activation loop and the ~15-min lease expiry without races or false reclaims.
-- **Token-checkpoint accuracy** — self-report (rough, available now) vs. a harness hook reading real transcript usage (accurate, per-agent, not uniformly available). MVP only proves the schema; *which* agents get the accurate path first is open.
+- **Working name** — unresolved; "AgentBus" remains the non-blocking codename. Candidates: WorktreeHub / RepoCrew / DevBoard / WorkBus.
+- **Role→agent binding** — resolved for MVP: project configuration supplies initial vendor-neutral bindings and the human can override them through the UI.
+- **Merge-conflict recovery** — resolved for MVP: the core blocks and alerts; the human resolves externally and requests a validated retry through the UI.
+- **Heartbeat ↔ lease ↔ long-poll mechanics** — the product contract is resolved: idle waits hold no lease, active work uses explicit heartbeat calls, clean expired worktrees requeue automatically, and dirty expired worktrees block for human reassignment. Architecture must define fencing and transaction details.
+- **Token checkpoints** — resolved for MVP: self-reported checkpoints prove schema and capture rate only. Accurate telemetry remains out of scope.
 
 **Strategic risk:**
 
@@ -109,6 +109,4 @@ Leading indicators sized for a personal dev-tool MVP (instrument the daemon's ev
 
 ## Ready for PRD?
 
-**No — one blocking item.** The brief itself is complete (problem, user, JTBD, value hypothesis, competitive landscape, quantified metrics, risks, non-goals all populated and decision-dense). What blocks PRD is **not** missing analysis but a **feasibility spike that must precede architecture**: the locked **blocking-long-poll activation model is contradicted by current MCP-client behavior** (hard tool-call timeouts; the Claude Code keepalive bug closed as "not planned"; MCP's own long-running answer is the poll-based **Tasks** primitive, not a held-open call). The PRD can be drafted in parallel, but the architecture cannot lock activation until a spike confirms which of {held-open long-poll if any client truly tolerates it, short-poll loop, MCP Tasks extension} is viable across Claude Code + Codex. Everything else is PRD-ready.
-
-**For the PRD author, resolve before/within the PRD:** (1) activation model post-spike; (2) working name; (3) role→agent binding mechanism; (4) post-block merge-conflict UX. Items 2–4 are product decisions; item 1 is the gating technical risk.
+**Yes — PRD drafted.** The activation spike resolved the former gating risk and the resulting requirements are captured in [`../prd/cross-agent-collaboration-mcp.md`](../prd/cross-agent-collaboration-mcp.md). The PRD also resolves the MVP proving topology, role binding and override mechanism, human merge authority, lease-expiry recovery, post-conflict retry behavior, and initial platform support. The final product name remains open but does not block architecture.
