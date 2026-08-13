@@ -4,6 +4,9 @@ import type {
   ClaimResult,
   ClaimTaskInput,
   CreateTaskInput,
+  ExpiredLeaseRecovery,
+  HeartbeatInput,
+  HeartbeatResult,
   RegisterSessionInput,
   Session,
   Task,
@@ -14,10 +17,19 @@ import { GitWorktreeService } from "../git/git-worktree-service.js";
 export class AgentBusService {
   readonly #database: AgentBusDatabase;
   readonly #git: GitWorktreeService;
+  readonly #leaseDurationMs: number;
+  readonly #now: () => Date;
 
-  constructor(database: AgentBusDatabase, git: GitWorktreeService) {
+  constructor(
+    database: AgentBusDatabase,
+    git: GitWorktreeService,
+    leaseDurationMs: number,
+    now: () => Date,
+  ) {
     this.#database = database;
     this.#git = git;
+    this.#leaseDurationMs = leaseDurationMs;
+    this.#now = now;
   }
 
   async registerSession(input: RegisterSessionInput): Promise<Session> {
@@ -88,17 +100,54 @@ export class AgentBusService {
     }
     try {
       const worktree = await this.#git.provision(input.taskId, reservation.leaseEpoch);
+      const activatedAt = this.#now();
       return this.#database.activateClaim({
         operationId: input.operationId,
         taskId: input.taskId,
         leaseId,
         leaseEpoch: reservation.leaseEpoch,
+        activatedAt: activatedAt.toISOString(),
+        expiresAt: new Date(activatedAt.getTime() + this.#leaseDurationMs).toISOString(),
         ...worktree,
       });
     } catch (error) {
       this.#database.releaseReservedClaim(input.taskId, leaseId);
       throw new Error(`Failed to provision worktree for task ${input.taskId}`, { cause: error });
     }
+  }
+
+  async heartbeat(input: HeartbeatInput): Promise<HeartbeatResult> {
+    const heartbeatAt = this.#now();
+    return this.#database.heartbeatOnce(
+      input,
+      heartbeatAt.toISOString(),
+      new Date(heartbeatAt.getTime() + this.#leaseDurationMs).toISOString(),
+    );
+  }
+
+  async reconcileExpiredLeases(): Promise<ExpiredLeaseRecovery[]> {
+    const now = this.#now().toISOString();
+    const expiredLeases = this.#database.listExpiredActiveLeases(now);
+    const recovered: ExpiredLeaseRecovery[] = [];
+    for (const lease of expiredLeases) {
+      let kind: ExpiredLeaseRecovery["kind"] = "blocked";
+      let reason: ExpiredLeaseRecovery["reason"];
+      try {
+        if (await this.#git.isClean(lease.worktreePath)) {
+          kind = "requeued";
+        } else {
+          reason = "dirty_worktree";
+        }
+      } catch (error) {
+        reason = "inspection_failed";
+        console.warn(`Unable to inspect expired worktree ${lease.worktreePath}`, error);
+      }
+      const result = this.#database.recoverExpiredLease({ ...lease, now, kind, reason });
+      if (result) {
+        recovered.push(result);
+      }
+    }
+    return recovered;
   }
 
   async close(): Promise<void> {
@@ -112,5 +161,7 @@ export async function createAgentBusService(
   return new AgentBusService(
     await AgentBusDatabase.open(options.repositoryPath),
     new GitWorktreeService(options.repositoryPath),
+    options.leaseDurationMs ?? 15 * 60_000,
+    options.now ?? (() => new Date()),
   );
 }

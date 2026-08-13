@@ -1,7 +1,15 @@
 import Database from "better-sqlite3";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { OperationConflictError, type ClaimResult, type Session, type Task } from "../domain/types.js";
+import {
+  OperationConflictError,
+  type ClaimResult,
+  type ExpiredLeaseRecovery,
+  type HeartbeatInput,
+  type HeartbeatResult,
+  type Session,
+  type Task,
+} from "../domain/types.js";
 
 export class AgentBusDatabase {
   readonly #database: Database.Database;
@@ -60,7 +68,6 @@ export class AgentBusDatabase {
         UNIQUE(task_id, lease_epoch)
       );
     `);
-    // scope: lease heartbeat and expiry reconciliation commands are deferred to the next Story 001 increment; add before exposing Worker progress mutations.
     const operationColumns = database.prepare<[], { name: string }>("PRAGMA table_info(operations)").all();
     if (!operationColumns.some((column) => column.name === "command_type")) {
       database.exec("ALTER TABLE operations ADD COLUMN command_type TEXT");
@@ -274,14 +281,24 @@ export class AgentBusDatabase {
     leaseEpoch: number;
     branch: string;
     worktreePath: string;
+    activatedAt: string;
+    expiresAt: string;
   }): ClaimResult {
     const operation = this.#database.transaction(() => {
       const update = this.#database
         .prepare(
-          `UPDATE leases SET active = 1, branch = ?, worktree_path = ?
+          `UPDATE leases SET active = 1, branch = ?, worktree_path = ?, heartbeat_at = ?, expires_at = ?
            WHERE lease_id = ? AND task_id = ? AND lease_epoch = ? AND active = 0`,
         )
-        .run(input.branch, input.worktreePath, input.leaseId, input.taskId, input.leaseEpoch);
+        .run(
+          input.branch,
+          input.worktreePath,
+          input.activatedAt,
+          input.expiresAt,
+          input.leaseId,
+          input.taskId,
+          input.leaseEpoch,
+        );
       if (update.changes !== 1) {
         return { kind: "not_claimable", taskId: input.taskId } as ClaimResult;
       }
@@ -322,6 +339,110 @@ export class AgentBusDatabase {
         .run(`${leaseId}:provision_failed`, "worktree.provision_failed", JSON.stringify({ taskId }), new Date().toISOString());
     });
     operation.immediate();
+  }
+
+  heartbeatOnce(input: HeartbeatInput, heartbeatAt: string, expiresAt: string): HeartbeatResult {
+    const operation = this.#database.transaction(() => {
+      const previous = this.getOperation<HeartbeatResult>(input.operationId, "lease.heartbeat");
+      if (previous) {
+        return previous;
+      }
+      const update = this.#database
+        .prepare(
+          `UPDATE leases SET heartbeat_at = ?, expires_at = ?
+           WHERE lease_id = ? AND task_id = ? AND session_id = ? AND lease_epoch = ?
+             AND active = 1 AND expires_at > ?`,
+        )
+        .run(
+          heartbeatAt,
+          expiresAt,
+          input.leaseId,
+          input.taskId,
+          input.sessionId,
+          input.leaseEpoch,
+          heartbeatAt,
+        );
+      if (update.changes !== 1) {
+        throw new Error("Stale or expired lease");
+      }
+      const result: HeartbeatResult = {
+        taskId: input.taskId,
+        leaseId: input.leaseId,
+        leaseEpoch: input.leaseEpoch,
+        expiresAt,
+      };
+      const resultJson = JSON.stringify(result);
+      this.#database
+        .prepare("INSERT INTO operations (operation_id, command_type, result_json) VALUES (?, ?, ?)")
+        .run(input.operationId, "lease.heartbeat", resultJson);
+      this.#database
+        .prepare(`INSERT INTO events (operation_id, event_type, payload_json, created_at) VALUES (?, ?, ?, ?)`)
+        .run(input.operationId, "lease.renewed", resultJson, heartbeatAt);
+      return result;
+    });
+    return operation.immediate();
+  }
+
+  listExpiredActiveLeases(now: string): Array<{
+    taskId: string;
+    leaseId: string;
+    leaseEpoch: number;
+    worktreePath: string;
+  }> {
+    return this.#database
+      .prepare<[string], { task_id: string; lease_id: string; lease_epoch: number; worktree_path: string }>(
+        `SELECT task_id, lease_id, lease_epoch, worktree_path
+         FROM leases WHERE active = 1 AND expires_at <= ? ORDER BY expires_at, lease_id`,
+      )
+      .all(now)
+      .map((lease) => ({
+        taskId: lease.task_id,
+        leaseId: lease.lease_id,
+        leaseEpoch: lease.lease_epoch,
+        worktreePath: lease.worktree_path,
+      }));
+  }
+
+  recoverExpiredLease(input: {
+    taskId: string;
+    leaseId: string;
+    leaseEpoch: number;
+    now: string;
+    kind: ExpiredLeaseRecovery["kind"];
+    reason?: ExpiredLeaseRecovery["reason"];
+  }): ExpiredLeaseRecovery | undefined {
+    const operation = this.#database.transaction(() => {
+      const expired = this.#database
+        .prepare(
+          `UPDATE leases SET active = 0, revoked_reason = 'expired'
+           WHERE lease_id = ? AND task_id = ? AND lease_epoch = ?
+             AND active = 1 AND expires_at <= ?`,
+        )
+        .run(input.leaseId, input.taskId, input.leaseEpoch, input.now);
+      if (expired.changes !== 1) {
+        return undefined;
+      }
+      const state = input.kind === "requeued" ? "unclaimed" : "blocked";
+      const transition = this.#database
+        .prepare("UPDATE tasks SET state = ? WHERE task_id = ? AND state = 'in_progress'")
+        .run(state, input.taskId);
+      if (transition.changes !== 1) {
+        throw new Error(`Expired lease ${input.leaseId} no longer owns task ${input.taskId}`);
+      }
+      const result: ExpiredLeaseRecovery = {
+        taskId: input.taskId,
+        leaseId: input.leaseId,
+        leaseEpoch: input.leaseEpoch,
+        kind: input.kind,
+        ...(input.reason ? { reason: input.reason } : {}),
+      };
+      const eventType = input.kind === "requeued" ? "task.requeued_after_lease_expiry" : "task.blocked_after_lease_expiry";
+      this.#database
+        .prepare(`INSERT INTO events (operation_id, event_type, payload_json, created_at) VALUES (?, ?, ?, ?)`)
+        .run(`${input.leaseId}:expired`, eventType, JSON.stringify(result), input.now);
+      return result;
+    });
+    return operation.immediate();
   }
 
   private areDependenciesSatisfied(taskId: string): boolean {

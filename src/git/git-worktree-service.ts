@@ -24,4 +24,9 @@ export class GitWorktreeService {
     });
     return { branch, worktreePath };
   }
+
+  async isClean(worktreePath: string): Promise<boolean> {
+    const { stdout } = await execFile("git", ["status", "--porcelain"], { cwd: worktreePath });
+    return stdout.trim().length === 0;
+  }
 }

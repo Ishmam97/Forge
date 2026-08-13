@@ -18,6 +18,8 @@ export interface Session {
 
 export interface AgentBusServiceOptions {
   repositoryPath: string;
+  leaseDurationMs?: number;
+  now?: () => Date;
 }
 
 export type TaskState =
@@ -61,6 +63,29 @@ export interface ClaimTaskInput {
   sessionId: string;
   taskId: string;
 }
+
+export interface HeartbeatInput {
+  operationId: string;
+  sessionId: string;
+  taskId: string;
+  leaseId: string;
+  leaseEpoch: number;
+}
+
+export interface HeartbeatResult {
+  taskId: string;
+  leaseId: string;
+  leaseEpoch: number;
+  expiresAt: string;
+}
+
+export type ExpiredLeaseRecovery = {
+  taskId: string;
+  leaseId: string;
+  leaseEpoch: number;
+  kind: "requeued" | "blocked";
+  reason?: "dirty_worktree" | "inspection_failed";
+};
 
 export type ClaimResult =
   | {

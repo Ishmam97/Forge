@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { access } from "node:fs/promises";
+import { access, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createAgentBusService } from "../src/core/agentbus-service.js";
 import { createGitRepository, removeGitRepository } from "./support/git-repository.js";
 
@@ -282,6 +283,185 @@ describe("AgentBusService", () => {
       sessionId: worker.sessionId,
       taskId: dependent.taskId,
     })).resolves.toEqual({ kind: "not_claimable", taskId: dependent.taskId });
+
+    await service.close();
+  });
+
+  it("renews only the current active lease and rejects a stale or expired fence", async () => {
+    const repositoryPath = await createGitRepository();
+    repositories.push(repositoryPath);
+    let currentTime = new Date("2026-08-13T12:00:00.000Z");
+    const service = await createAgentBusService({
+      repositoryPath,
+      leaseDurationMs: 60_000,
+      now: () => currentTime,
+    });
+    const lead = await service.registerSession({
+      operationId: "heartbeat-lead",
+      agentId: "lead-agent",
+      profile: "lead-profile",
+      roles: ["lead"],
+      capabilities: ["task.create"],
+    });
+    const worker = await service.registerSession({
+      operationId: "heartbeat-worker",
+      agentId: "worker-agent",
+      profile: "worker-profile",
+      roles: ["worker"],
+      capabilities: ["task.implement"],
+    });
+    const task = await service.createTask({
+      operationId: "heartbeat-task",
+      actorSessionId: lead.sessionId,
+      title: "Renew lease",
+      objective: "Prove fence renewal.",
+      context: "The current fence alone may extend the lease.",
+      acceptanceCriteria: ["A heartbeat extends the current lease"],
+      expectedFileScope: ["src/lease.ts"],
+      dependencies: [],
+      eligibleRole: "worker",
+    });
+    const claim = await service.claimTask({
+      operationId: "heartbeat-claim",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+    });
+    expect(claim).toMatchObject({ kind: "claimed" });
+    if (claim.kind !== "claimed") throw new Error("claim should succeed");
+
+    currentTime = new Date("2026-08-13T12:00:30.000Z");
+    await expect(service.heartbeat({
+      operationId: "heartbeat-current",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+      leaseId: claim.leaseId,
+      leaseEpoch: claim.leaseEpoch,
+    })).resolves.toMatchObject({
+      taskId: task.taskId,
+      leaseId: claim.leaseId,
+      leaseEpoch: claim.leaseEpoch,
+      expiresAt: "2026-08-13T12:01:30.000Z",
+    });
+
+    await expect(service.heartbeat({
+      operationId: "heartbeat-stale",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+      leaseId: claim.leaseId,
+      leaseEpoch: claim.leaseEpoch + 1,
+    })).rejects.toThrow("Stale or expired lease");
+
+    currentTime = new Date("2026-08-13T12:01:31.000Z");
+    await expect(service.heartbeat({
+      operationId: "heartbeat-expired",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+      leaseId: claim.leaseId,
+      leaseEpoch: claim.leaseEpoch,
+    })).rejects.toThrow("Stale or expired lease");
+
+    await service.close();
+  });
+
+  it("requeues an expired lease when its core-created worktree is clean", async () => {
+    const repositoryPath = await createGitRepository();
+    repositories.push(repositoryPath);
+    let currentTime = new Date("2026-08-13T12:00:00.000Z");
+    const service = await createAgentBusService({
+      repositoryPath,
+      leaseDurationMs: 60_000,
+      now: () => currentTime,
+    });
+    const lead = await service.registerSession({
+      operationId: "expiry-clean-lead",
+      agentId: "lead-agent",
+      profile: "lead-profile",
+      roles: ["lead"],
+      capabilities: ["task.create"],
+    });
+    const worker = await service.registerSession({
+      operationId: "expiry-clean-worker",
+      agentId: "worker-agent",
+      profile: "worker-profile",
+      roles: ["worker"],
+      capabilities: ["task.implement"],
+    });
+    const task = await service.createTask({
+      operationId: "expiry-clean-task",
+      actorSessionId: lead.sessionId,
+      title: "Recover clean worktree",
+      objective: "Requeue clean expired work.",
+      context: "The core checks the isolated worktree after expiry.",
+      acceptanceCriteria: ["Clean work requeues"],
+      expectedFileScope: ["src/recovery.ts"],
+      dependencies: [],
+      eligibleRole: "worker",
+    });
+    const claim = await service.claimTask({
+      operationId: "expiry-clean-claim",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+    });
+    expect(claim).toMatchObject({ kind: "claimed" });
+
+    currentTime = new Date("2026-08-13T12:01:01.000Z");
+    await expect(service.reconcileExpiredLeases()).resolves.toEqual([
+      expect.objectContaining({ taskId: task.taskId, kind: "requeued" }),
+    ]);
+    await expect(service.getTaskContext(task.taskId)).resolves.toMatchObject({ state: "unclaimed" });
+
+    await service.close();
+  });
+
+  it("blocks an expired lease when its core-created worktree is dirty", async () => {
+    const repositoryPath = await createGitRepository();
+    repositories.push(repositoryPath);
+    let currentTime = new Date("2026-08-13T12:00:00.000Z");
+    const service = await createAgentBusService({
+      repositoryPath,
+      leaseDurationMs: 60_000,
+      now: () => currentTime,
+    });
+    const lead = await service.registerSession({
+      operationId: "expiry-dirty-lead",
+      agentId: "lead-agent",
+      profile: "lead-profile",
+      roles: ["lead"],
+      capabilities: ["task.create"],
+    });
+    const worker = await service.registerSession({
+      operationId: "expiry-dirty-worker",
+      agentId: "worker-agent",
+      profile: "worker-profile",
+      roles: ["worker"],
+      capabilities: ["task.implement"],
+    });
+    const task = await service.createTask({
+      operationId: "expiry-dirty-task",
+      actorSessionId: lead.sessionId,
+      title: "Preserve dirty worktree",
+      objective: "Block dirty expired work.",
+      context: "The human must decide how to recover uncommitted changes.",
+      acceptanceCriteria: ["Dirty work blocks"],
+      expectedFileScope: ["src/recovery.ts"],
+      dependencies: [],
+      eligibleRole: "worker",
+    });
+    const claim = await service.claimTask({
+      operationId: "expiry-dirty-claim",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+    });
+    expect(claim).toMatchObject({ kind: "claimed" });
+    if (claim.kind !== "claimed") throw new Error("claim should succeed");
+    await writeFile(join(claim.worktreePath, "uncommitted.txt"), "preserve me");
+
+    currentTime = new Date("2026-08-13T12:01:01.000Z");
+    await expect(service.reconcileExpiredLeases()).resolves.toEqual([
+      expect.objectContaining({ taskId: task.taskId, kind: "blocked" }),
+    ]);
+    await expect(service.getTaskContext(task.taskId)).resolves.toMatchObject({ state: "blocked" });
+    await expect(access(join(claim.worktreePath, "uncommitted.txt"))).resolves.toBeUndefined();
 
     await service.close();
   });
