@@ -3,7 +3,12 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import Fastify from "fastify";
 import { createAgentBusService, type AgentBusService } from "../core/agentbus-service.js";
-import type { ClaimTaskInput, CreateTaskInput, RegisterSessionInput } from "../domain/types.js";
+import type {
+  ClaimTaskInput,
+  CreateTaskInput,
+  HeartbeatInput,
+  RegisterSessionInput,
+} from "../domain/types.js";
 
 const execFile = promisify(execFileCallback);
 
@@ -72,6 +77,12 @@ export async function startAgentBusServer(
     Body: Omit<ClaimTaskInput, "taskId">;
   }>("/tasks/:taskId/claim", async (request) => {
     return service.claimTask({ ...request.body, taskId: request.params.taskId });
+  });
+  app.post<{
+    Params: { taskId: string };
+    Body: Omit<HeartbeatInput, "taskId">;
+  }>("/tasks/:taskId/heartbeat", async (request) => {
+    return service.heartbeat({ ...request.body, taskId: request.params.taskId });
   });
   try {
     const url = await app.listen({ host: "127.0.0.1", port: options.port ?? 0 });

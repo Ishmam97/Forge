@@ -161,4 +161,67 @@ describe("AgentBus HTTP server", () => {
       leaseEpoch: 1,
     });
   });
+
+  it("renews a claimed task through the loopback command boundary", async () => {
+    const repositoryPath = await createGitRepository();
+    repositories.push(repositoryPath);
+    const server = await startAgentBusServer({ repositoryPath, port: 0 });
+    servers.push(server);
+    const register = async (operationId: string, roles: string[]) => {
+      const response = await fetch(`${server.url}/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          operationId,
+          agentId: operationId,
+          profile: `${roles[0]}-profile`,
+          roles,
+          capabilities: ["task.implement"],
+        }),
+      });
+      return await response.json() as { sessionId: string };
+    };
+    const lead = await register("http-heartbeat-lead", ["lead"]);
+    const worker = await register("http-heartbeat-worker", ["worker"]);
+    const create = await fetch(`${server.url}/tasks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        operationId: "http-heartbeat-task",
+        actorSessionId: lead.sessionId,
+        title: "HTTP heartbeat",
+        objective: "Renew through the daemon.",
+        context: "The exact lease fence is required.",
+        acceptanceCriteria: ["Worker renews its lease"],
+        expectedFileScope: ["src/http-heartbeat.ts"],
+        dependencies: [],
+        eligibleRole: "worker",
+      }),
+    });
+    const task = await create.json() as { taskId: string };
+    const claimResponse = await fetch(`${server.url}/tasks/${task.taskId}/claim`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ operationId: "http-heartbeat-claim", sessionId: worker.sessionId }),
+    });
+    const claim = await claimResponse.json() as { leaseId: string; leaseEpoch: number };
+
+    const heartbeat = await fetch(`${server.url}/tasks/${task.taskId}/heartbeat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        operationId: "http-heartbeat",
+        sessionId: worker.sessionId,
+        leaseId: claim.leaseId,
+        leaseEpoch: claim.leaseEpoch,
+      }),
+    });
+
+    expect(heartbeat.status).toBe(200);
+    await expect(heartbeat.json()).resolves.toMatchObject({
+      taskId: task.taskId,
+      leaseId: claim.leaseId,
+      leaseEpoch: claim.leaseEpoch,
+    });
+  });
 });
