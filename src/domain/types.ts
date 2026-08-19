@@ -58,6 +58,19 @@ export interface Task {
   state: TaskState;
 }
 
+export interface TaskEvent {
+  sequence: number;
+  operationId: string;
+  eventType: string;
+  payload: unknown;
+  createdAt: string;
+}
+
+export interface TaskDetail {
+  task: Task;
+  events: TaskEvent[];
+}
+
 export interface ClaimTaskInput {
   operationId: string;
   sessionId: string;

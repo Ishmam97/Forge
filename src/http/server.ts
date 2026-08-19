@@ -72,11 +72,11 @@ export async function startAgentBusServer(
     return reply.code(201).send(task);
   });
   app.get<{ Params: { taskId: string } }>("/tasks/:taskId", async (request, reply) => {
-    const task = await service.getTaskContext(request.params.taskId);
-    if (!task) {
+    const detail = await service.getTaskDetail(request.params.taskId);
+    if (!detail) {
       return reply.code(404).send({ error: "Task not found" });
     }
-    return task;
+    return detail;
   });
   app.post<{
     Params: { taskId: string };

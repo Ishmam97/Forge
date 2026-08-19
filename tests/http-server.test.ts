@@ -104,9 +104,12 @@ describe("AgentBus HTTP server", () => {
     const context = await fetch(`${server.url}/tasks/${task.taskId}`);
     expect(context.status).toBe(200);
     await expect(context.json()).resolves.toMatchObject({
-      taskId: task.taskId,
-      title: "HTTP task",
-      state: "unclaimed",
+      task: {
+        taskId: task.taskId,
+        title: "HTTP task",
+        state: "unclaimed",
+      },
+      events: [expect.objectContaining({ eventType: "task.created" })],
     });
   });
 

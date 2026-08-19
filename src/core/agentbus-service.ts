@@ -10,6 +10,7 @@ import type {
   RegisterSessionInput,
   Session,
   Task,
+  TaskDetail,
 } from "../domain/types.js";
 import { AgentBusDatabase } from "../db/database.js";
 import { GitWorktreeService } from "../git/git-worktree-service.js";
@@ -77,6 +78,11 @@ export class AgentBusService {
 
   async getTaskContext(taskId: string): Promise<Task | undefined> {
     return this.#database.getTask(taskId);
+  }
+
+  async getTaskDetail(taskId: string): Promise<TaskDetail | undefined> {
+    const task = this.#database.getTask(taskId);
+    return task ? { task, events: this.#database.listTaskEvents(taskId) } : undefined;
   }
 
   async claimTask(input: ClaimTaskInput): Promise<ClaimResult> {

@@ -9,6 +9,7 @@ import {
   type HeartbeatResult,
   type Session,
   type Task,
+  type TaskEvent,
 } from "../domain/types.js";
 
 export class AgentBusDatabase {
@@ -236,6 +237,33 @@ export class AgentBusDatabase {
       eligibleRole: row.eligible_role,
       state: row.state,
     };
+  }
+
+  listTaskEvents(taskId: string): TaskEvent[] {
+    return this.#database
+      .prepare<
+        [string],
+        {
+          sequence: number;
+          operation_id: string;
+          event_type: string;
+          payload_json: string;
+          created_at: string;
+        }
+      >(
+        `SELECT sequence, operation_id, event_type, payload_json, created_at
+         FROM events
+         WHERE json_extract(payload_json, '$.taskId') = ?
+         ORDER BY sequence`,
+      )
+      .all(taskId)
+      .map((event) => ({
+        sequence: event.sequence,
+        operationId: event.operation_id,
+        eventType: event.event_type,
+        payload: JSON.parse(event.payload_json) as unknown,
+        createdAt: event.created_at,
+      }));
   }
 
   reserveClaim(input: { taskId: string; sessionId: string; leaseId: string }):
