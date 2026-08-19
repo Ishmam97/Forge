@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import Fastify from "fastify";
 import { createAgentBusService, type AgentBusService } from "../core/agentbus-service.js";
+import { CommandError } from "../domain/errors.js";
 import type {
   ClaimTaskInput,
   CreateTaskInput,
@@ -11,6 +12,14 @@ import type {
 } from "../domain/types.js";
 
 const execFile = promisify(execFileCallback);
+
+function operationIdFromBody(body: unknown): string | undefined {
+  if (typeof body !== "object" || body === null || !("operationId" in body)) {
+    return undefined;
+  }
+  const operationId = (body as { operationId?: unknown }).operationId;
+  return typeof operationId === "string" ? operationId : undefined;
+}
 
 export interface StartAgentBusServerOptions {
   repositoryPath: string;
@@ -62,6 +71,19 @@ export async function startAgentBusServer(
     ...(options.now === undefined ? {} : { now: options.now }),
   });
   const app = Fastify({ logger: false });
+  app.setErrorHandler((error, request, reply) => {
+    const commandError = error instanceof CommandError ? error : undefined;
+    const operationId = operationIdFromBody(request.body);
+    const statusCode = commandError?.statusCode ?? 500;
+    const code = commandError?.code ?? "INTERNAL_ERROR";
+    const message = commandError?.message ?? "Command failed";
+    console.warn(JSON.stringify({ operationId, code, message }));
+    return reply.code(statusCode).send({
+      ...(operationId === undefined ? {} : { operationId }),
+      code,
+      message,
+    });
+  });
   app.get("/health", async () => ({ status: "ok" }));
   app.post<{ Body: RegisterSessionInput }>("/sessions", async (request, reply) => {
     const session = await service.registerSession(request.body);

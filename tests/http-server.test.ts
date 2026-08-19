@@ -278,4 +278,81 @@ describe("AgentBus HTTP server", () => {
       expect.objectContaining({ taskId: task.taskId, kind: "requeued" }),
     ]);
   });
+
+  it("returns a typed operation-scoped error without task context for invalid commands", async () => {
+    const repositoryPath = await createGitRepository();
+    repositories.push(repositoryPath);
+    const server = await startAgentBusServer({ repositoryPath, port: 0 });
+    servers.push(server);
+
+    const response = await fetch(`${server.url}/tasks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ operationId: "http-invalid-task" }),
+    });
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      operationId: "http-invalid-task",
+      code: "SESSION_NOT_AUTHORIZED",
+      message: "Only a registered Lead session can create tasks",
+    });
+  });
+
+  it("returns a lease-fence conflict for a stale heartbeat", async () => {
+    const repositoryPath = await createGitRepository();
+    repositories.push(repositoryPath);
+    const server = await startAgentBusServer({ repositoryPath, port: 0 });
+    servers.push(server);
+    const lead = await server.service.registerSession({
+      operationId: "http-stale-lead",
+      agentId: "lead-agent",
+      profile: "lead-profile",
+      roles: ["lead"],
+      capabilities: ["task.create"],
+    });
+    const worker = await server.service.registerSession({
+      operationId: "http-stale-worker",
+      agentId: "worker-agent",
+      profile: "worker-profile",
+      roles: ["worker"],
+      capabilities: ["task.implement"],
+    });
+    const task = await server.service.createTask({
+      operationId: "http-stale-task",
+      actorSessionId: lead.sessionId,
+      title: "Stale HTTP heartbeat",
+      objective: "Reject stale fence from the daemon.",
+      context: "A wrong epoch has no authority.",
+      acceptanceCriteria: ["Stale lease returns conflict"],
+      expectedFileScope: ["src/stale-http.ts"],
+      dependencies: [],
+      eligibleRole: "worker",
+    });
+    const claim = await server.service.claimTask({
+      operationId: "http-stale-claim",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+    });
+    expect(claim).toMatchObject({ kind: "claimed" });
+    if (claim.kind !== "claimed") throw new Error("claim should succeed");
+
+    const response = await fetch(`${server.url}/tasks/${task.taskId}/heartbeat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        operationId: "http-stale-heartbeat",
+        sessionId: worker.sessionId,
+        leaseId: claim.leaseId,
+        leaseEpoch: claim.leaseEpoch + 1,
+      }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      operationId: "http-stale-heartbeat",
+      code: "LEASE_FENCE_INVALID",
+      message: "Stale or expired lease",
+    });
+  });
 });

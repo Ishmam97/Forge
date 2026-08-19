@@ -13,6 +13,7 @@ import type {
   TaskDetail,
 } from "../domain/types.js";
 import { AgentBusDatabase } from "../db/database.js";
+import { CommandError } from "../domain/errors.js";
 import { GitWorktreeService } from "../git/git-worktree-service.js";
 
 export class AgentBusService {
@@ -51,7 +52,11 @@ export class AgentBusService {
   async createTask(input: CreateTaskInput): Promise<Task> {
     const actor = this.#database.getSession(input.actorSessionId);
     if (!actor || !actor.roles.includes("lead")) {
-      throw new Error("Only a registered Lead session can create tasks");
+      throw new CommandError(
+        "SESSION_NOT_AUTHORIZED",
+        "Only a registered Lead session can create tasks",
+        403,
+      );
     }
     if (
       input.title.trim().length === 0 ||
@@ -60,7 +65,7 @@ export class AgentBusService {
       input.acceptanceCriteria.length === 0 ||
       input.expectedFileScope.length === 0
     ) {
-      throw new Error("Task handoff data is incomplete");
+      throw new CommandError("TASK_HANDOFF_INCOMPLETE", "Task handoff data is incomplete", 400);
     }
     const task: Task = {
       taskId: randomUUID(),

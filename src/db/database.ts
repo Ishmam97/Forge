@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { CommandError } from "../domain/errors.js";
 import {
   OperationConflictError,
   type ClaimResult,
@@ -391,7 +392,7 @@ export class AgentBusDatabase {
           heartbeatAt,
         );
       if (update.changes !== 1) {
-        throw new Error("Stale or expired lease");
+        throw new CommandError("LEASE_FENCE_INVALID", "Stale or expired lease", 409);
       }
       const result: HeartbeatResult = {
         taskId: input.taskId,
