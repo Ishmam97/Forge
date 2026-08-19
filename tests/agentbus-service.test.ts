@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createAgentBusService } from "../src/core/agentbus-service.js";
-import { createGitRepository, removeGitRepository } from "./support/git-repository.js";
+import { createGitRepository, removeGitRepository, runGit } from "./support/git-repository.js";
 
 const repositories: string[] = [];
 
@@ -525,5 +525,52 @@ describe("AgentBusService", () => {
     })).resolves.toMatchObject({ expiresAt: "2026-08-19T12:01:30.000Z" });
 
     await secondService.close();
+  });
+
+  it("compensates a failed worktree provision and leaves the task claimable", async () => {
+    const repositoryPath = await createGitRepository();
+    repositories.push(repositoryPath);
+    const service = await createAgentBusService({ repositoryPath });
+    const lead = await service.registerSession({
+      operationId: "provision-failure-lead",
+      agentId: "lead-agent",
+      profile: "lead-profile",
+      roles: ["lead"],
+      capabilities: ["task.create"],
+    });
+    const worker = await service.registerSession({
+      operationId: "provision-failure-worker",
+      agentId: "worker-agent",
+      profile: "worker-profile",
+      roles: ["worker"],
+      capabilities: ["task.implement"],
+    });
+    const task = await service.createTask({
+      operationId: "provision-failure-task",
+      actorSessionId: lead.sessionId,
+      title: "Compensate failed provision",
+      objective: "Restore a task after Git rejects its generated branch.",
+      context: "The first generation branch is deliberately pre-created.",
+      acceptanceCriteria: ["Task becomes claimable after failure"],
+      expectedFileScope: ["src/provision.ts"],
+      dependencies: [],
+      eligibleRole: "worker",
+    });
+    await runGit(repositoryPath, ["branch", `agentbus/${task.taskId}-1`]);
+
+    await expect(service.claimTask({
+      operationId: "provision-failure-claim",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+    })).rejects.toThrow(`Failed to provision worktree for task ${task.taskId}`);
+    await expect(service.getTaskContext(task.taskId)).resolves.toMatchObject({ state: "unclaimed" });
+
+    await expect(service.claimTask({
+      operationId: "provision-retry-claim",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+    })).resolves.toMatchObject({ kind: "claimed", leaseEpoch: 2 });
+
+    await service.close();
   });
 });
