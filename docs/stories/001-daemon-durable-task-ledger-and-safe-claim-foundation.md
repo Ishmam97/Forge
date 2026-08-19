@@ -1,6 +1,6 @@
 # Story 001: Daemon, Durable Task Ledger, and Safe Claim Foundation
 
-**Status:** Ready
+**Status:** In progress
 **PRD:** [Cross-Agent Collaboration MCP](../prd/cross-agent-collaboration-mcp.md)
 **Architecture:** [Cross-Agent Collaboration MCP — First implementation story](../architecture/cross-agent-collaboration-mcp.md#first-implementation-story)
 **Estimate:** 3–5 days
@@ -15,6 +15,25 @@ Ship the repository-local coordination kernel: explicit daemon startup, durable 
 AgentBus uses one repository-scoped SQLite database in WAL mode. Accepted commands append an immutable event and update query projections inside one short `BEGIN IMMEDIATE` transaction; mutating commands carry an idempotent `operation_id`. A claim is deliberately two-phase: reserve a task and pending lease transactionally, create its derived Git branch/worktree outside the SQLite lock, then activate the lease and transition to `in_progress` in a second transaction. A failed provision compensates to the prior claimable state and returns no authority. Lease-bound mutations must present the matching active, unexpired `{lease_id, lease_epoch}` fence.
 
 This story implements the core’s local HTTP command boundary rather than the MCP adapter. It establishes the commands that later MCP and UI clients will call. It does not implement long-poll, WebSockets, role overrides, review, merge, messages, usage completion, or cleanup.
+
+## Implementation status — 2026-08-19
+
+### Completed
+
+- Repository-local SQLite/WAL state, durable sessions and tasks, idempotent operations, append-only events, and `BEGIN IMMEDIATE` command transactions.
+- Loopback daemon startup with canonical Git-root validation and actionable Windows refusal.
+- Core-generated, generation-safe Git worktrees; atomic two-phase claims; dependency rejection; and real-Git compensation after provisioning failure.
+- Fenced lease activation, heartbeat replay, expiry reconciliation (clean requeues; dirty blocks), and active-lease persistence across a restart.
+- Local JSON commands for session registration, task creation/detail, claim, heartbeat, and expiry reconciliation. Task detail returns only the requested task and its event history.
+- Typed operation-scoped HTTP errors, including stale-lease `409` responses, without returning task context in error payloads.
+- 25 passing Vitest tests, successful TypeScript check, and production build at the latest checkpoint.
+
+### Remaining
+
+- Add the validated project configuration loader and wire CLI `--config` values for integration branch, lease duration, and worktree-root derivation.
+- Split/strengthen the database schema/migration surface with explicit indexes and add direct database durability/event-count coverage, including an acknowledged-mutation abrupt-close equivalent.
+- Complete safety coverage for repository/task values containing spaces or shell metacharacters, and broaden typed error coverage beyond task creation and lease fences.
+- Review the completed foundation against the full Story 001 acceptance criteria, then update this story to **Done** only when those final checks pass.
 
 ## Affected files
 

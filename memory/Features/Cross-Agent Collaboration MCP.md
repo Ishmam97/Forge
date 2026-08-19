@@ -1,8 +1,8 @@
 ---
 type: feature
-status: active
+status: in-progress
 created: '2026-06-26'
-updated: '2026-08-13'
+updated: '2026-08-19'
 tags:
   - feature
   - mcp
@@ -15,7 +15,7 @@ related:
 ---
 # Cross-Agent Collaboration MCP
 
-A local-first coordination substrate that lets heterogeneous coding agents (Claude Code, Codex, OpenCode, Kimi, …) share a task board, message each other, and collaborate on one repo without a human relaying state between terminals. Brainstormed 2026-06-26; sharpened by a multi-agent review (see [[Cross-Agent MCP - Multi-Agent Review Consensus]]); PRD drafted 2026-08-13 and ready for architecture.
+A local-first coordination substrate that lets heterogeneous coding agents (Claude Code, Codex, OpenCode, Kimi, …) share a task board, message each other, and collaborate on one repo without a human relaying state between terminals. Brainstormed 2026-06-26; sharpened by a multi-agent review (see [[Cross-Agent MCP - Multi-Agent Review Consensus]]); PRD, architecture, ADRs, and Story 001 were drafted by 2026-08-13. Story 001 implementation is now in progress.
 
 **Working name:** unresolved. `AgentBus` (provisional) reads as a message-transport layer, but the architecture's real strength is *shared state + isolated workspaces* — candidates: `WorktreeHub`, `RepoCrew`, `DevBoard`, `WorkBus`.
 
@@ -101,6 +101,14 @@ The testable vertical slice:
 - Conflict recovery: the human resolves externally and requests a validated retry through the UI.
 - Platforms: Linux and macOS for MVP; Windows deferred.
 - Token checkpoints: self-report only for MVP; accurate telemetry remains out of scope.
+
+## Implementation checkpoint — 2026-08-19
+
+Story 001 (`docs/stories/001-daemon-durable-task-ledger-and-safe-claim-foundation.md`) is **in progress**. The implemented and locally validated foundation includes repository-local SQLite/WAL state; durable sessions/tasks/events with idempotent operations; loopback daemon startup with Git-root and Windows checks; atomic two-phase core-owned worktree claims; fenced heartbeats and clean/dirty expiry recovery; task-scoped event history; and typed operation-scoped HTTP errors. The local JSON boundary currently provides session registration, task creation/detail, claim, heartbeat, and expiry reconciliation.
+
+Checkpoints: `1b3dcda`, `f22e0dc`, `4e9136f`, `331de80`, `c972652`, `923aade`, `90dd1c7`, `3112304`, and `7088950`. At this checkpoint, TypeScript checking, production build, and 25 Vitest tests pass.
+
+Remaining in Story 001: validated project configuration/CLI `--config` wiring; schema and direct durability/event-count hardening (including abrupt-close equivalent); safety coverage for shell-metacharacter input; and an acceptance-criteria review. MCP long-poll/UI/review/merge remain deliberately later-story work.
 
 ## Non-goals (MVP)
 
