@@ -465,4 +465,65 @@ describe("AgentBusService", () => {
 
     await service.close();
   });
+
+  it("preserves an active lease fence across a repository-local restart", async () => {
+    const repositoryPath = await createGitRepository();
+    repositories.push(repositoryPath);
+    let currentTime = new Date("2026-08-19T12:00:00.000Z");
+    const firstService = await createAgentBusService({
+      repositoryPath,
+      leaseDurationMs: 60_000,
+      now: () => currentTime,
+    });
+    const lead = await firstService.registerSession({
+      operationId: "restart-lease-lead",
+      agentId: "lead-agent",
+      profile: "lead-profile",
+      roles: ["lead"],
+      capabilities: ["task.create"],
+    });
+    const worker = await firstService.registerSession({
+      operationId: "restart-lease-worker",
+      agentId: "worker-agent",
+      profile: "worker-profile",
+      roles: ["worker"],
+      capabilities: ["task.implement"],
+    });
+    const task = await firstService.createTask({
+      operationId: "restart-lease-task",
+      actorSessionId: lead.sessionId,
+      title: "Persist active lease",
+      objective: "Retain the fence after a restart.",
+      context: "The reopened database must preserve active lease metadata.",
+      acceptanceCriteria: ["The active lease renews after restart"],
+      expectedFileScope: ["src/restart.ts"],
+      dependencies: [],
+      eligibleRole: "worker",
+    });
+    const claim = await firstService.claimTask({
+      operationId: "restart-lease-claim",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+    });
+    expect(claim).toMatchObject({ kind: "claimed" });
+    if (claim.kind !== "claimed") throw new Error("claim should succeed");
+    await firstService.close();
+
+    currentTime = new Date("2026-08-19T12:00:30.000Z");
+    const secondService = await createAgentBusService({
+      repositoryPath,
+      leaseDurationMs: 60_000,
+      now: () => currentTime,
+    });
+
+    await expect(secondService.heartbeat({
+      operationId: "restart-lease-heartbeat",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+      leaseId: claim.leaseId,
+      leaseEpoch: claim.leaseEpoch,
+    })).resolves.toMatchObject({ expiresAt: "2026-08-19T12:01:30.000Z" });
+
+    await secondService.close();
+  });
 });
