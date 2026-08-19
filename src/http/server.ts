@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import Fastify from "fastify";
 import { createAgentBusService, type AgentBusService } from "../core/agentbus-service.js";
+import type { ClaimTaskInput, CreateTaskInput, RegisterSessionInput } from "../domain/types.js";
 
 const execFile = promisify(execFileCallback);
 
@@ -51,6 +52,27 @@ export async function startAgentBusServer(
   const service = await createAgentBusService({ repositoryPath });
   const app = Fastify({ logger: false });
   app.get("/health", async () => ({ status: "ok" }));
+  app.post<{ Body: RegisterSessionInput }>("/sessions", async (request, reply) => {
+    const session = await service.registerSession(request.body);
+    return reply.code(201).send(session);
+  });
+  app.post<{ Body: CreateTaskInput }>("/tasks", async (request, reply) => {
+    const task = await service.createTask(request.body);
+    return reply.code(201).send(task);
+  });
+  app.get<{ Params: { taskId: string } }>("/tasks/:taskId", async (request, reply) => {
+    const task = await service.getTaskContext(request.params.taskId);
+    if (!task) {
+      return reply.code(404).send({ error: "Task not found" });
+    }
+    return task;
+  });
+  app.post<{
+    Params: { taskId: string };
+    Body: Omit<ClaimTaskInput, "taskId">;
+  }>("/tasks/:taskId/claim", async (request) => {
+    return service.claimTask({ ...request.body, taskId: request.params.taskId });
+  });
   try {
     const url = await app.listen({ host: "127.0.0.1", port: options.port ?? 0 });
     return {
