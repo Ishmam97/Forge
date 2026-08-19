@@ -224,4 +224,55 @@ describe("AgentBus HTTP server", () => {
       leaseEpoch: claim.leaseEpoch,
     });
   });
+
+  it("reconciles clean expired leases through the loopback command boundary", async () => {
+    const repositoryPath = await createGitRepository();
+    repositories.push(repositoryPath);
+    let currentTime = new Date("2026-08-19T12:00:00.000Z");
+    const server = await startAgentBusServer({
+      repositoryPath,
+      port: 0,
+      leaseDurationMs: 60_000,
+      now: () => currentTime,
+    });
+    servers.push(server);
+    const lead = await server.service.registerSession({
+      operationId: "http-reconcile-lead",
+      agentId: "lead-agent",
+      profile: "lead-profile",
+      roles: ["lead"],
+      capabilities: ["task.create"],
+    });
+    const worker = await server.service.registerSession({
+      operationId: "http-reconcile-worker",
+      agentId: "worker-agent",
+      profile: "worker-profile",
+      roles: ["worker"],
+      capabilities: ["task.implement"],
+    });
+    const task = await server.service.createTask({
+      operationId: "http-reconcile-task",
+      actorSessionId: lead.sessionId,
+      title: "HTTP reconciliation",
+      objective: "Recover from the daemon boundary.",
+      context: "Clean work may requeue after its lease expires.",
+      acceptanceCriteria: ["Daemon reconciles expiry"],
+      expectedFileScope: ["src/http-reconcile.ts"],
+      dependencies: [],
+      eligibleRole: "worker",
+    });
+    await server.service.claimTask({
+      operationId: "http-reconcile-claim",
+      sessionId: worker.sessionId,
+      taskId: task.taskId,
+    });
+    currentTime = new Date("2026-08-19T12:01:01.000Z");
+
+    const response = await fetch(`${server.url}/leases/reconcile-expired`, { method: "POST" });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual([
+      expect.objectContaining({ taskId: task.taskId, kind: "requeued" }),
+    ]);
+  });
 });

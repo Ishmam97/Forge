@@ -15,6 +15,8 @@ const execFile = promisify(execFileCallback);
 export interface StartAgentBusServerOptions {
   repositoryPath: string;
   port?: number;
+  leaseDurationMs?: number;
+  now?: () => Date;
 }
 
 export interface StartedAgentBusServer {
@@ -54,7 +56,11 @@ export async function startAgentBusServer(
     }
     throw new Error(`Not a Git repository: ${options.repositoryPath}`);
   }
-  const service = await createAgentBusService({ repositoryPath });
+  const service = await createAgentBusService({
+    repositoryPath,
+    ...(options.leaseDurationMs === undefined ? {} : { leaseDurationMs: options.leaseDurationMs }),
+    ...(options.now === undefined ? {} : { now: options.now }),
+  });
   const app = Fastify({ logger: false });
   app.get("/health", async () => ({ status: "ok" }));
   app.post<{ Body: RegisterSessionInput }>("/sessions", async (request, reply) => {
@@ -84,6 +90,7 @@ export async function startAgentBusServer(
   }>("/tasks/:taskId/heartbeat", async (request) => {
     return service.heartbeat({ ...request.body, taskId: request.params.taskId });
   });
+  app.post("/leases/reconcile-expired", async () => service.reconcileExpiredLeases());
   try {
     const url = await app.listen({ host: "127.0.0.1", port: options.port ?? 0 });
     return {
