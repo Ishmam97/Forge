@@ -18,3 +18,18 @@ cwd = "."  # paths are relative to repo root; omitting cwd or setting ".." break
 startup_timeout_sec = 20
 tool_timeout_sec = 60
 
+[mcp_servers.obsidian.tools.read_multiple_notes]
+approval_mode = "approve"
+
+[mcp_servers.obsidian.tools.search_notes]
+approval_mode = "approve"
+
+[mcp_servers.obsidian.tools.read_note]
+approval_mode = "approve"
+
+[mcp_servers.obsidian.tools.patch_note]
+approval_mode = "approve"
+
+[mcp_servers.obsidian.tools.update_frontmatter]
+approval_mode = "approve"
+

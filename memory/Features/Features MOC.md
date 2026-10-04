@@ -15,5 +15,6 @@ PM creates the stub; analyst, architect, and planner enrich it. Tag `#feature`.
 ## Features
 
 - [[Cross-Agent Collaboration MCP]] — neutral coordination substrate for heterogeneous coding agents; brief done ([`docs/briefs/cross-agent-collaboration-mcp.md`](../../docs/briefs/cross-agent-collaboration-mcp.md)), PRD blocked on activation spike
+- [[Forge Workspace]] — windowed multi-agent canvas tab (PTY terminals + vault graph windows) in the DSH Web GUI; implemented in deepseek-harness, awaiting `dsh web` restart to activate
 
 [[Home]]
