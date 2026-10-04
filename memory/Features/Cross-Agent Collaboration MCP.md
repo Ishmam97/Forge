@@ -108,7 +108,7 @@ Story 001 (`docs/stories/001-daemon-durable-task-ledger-and-safe-claim-foundatio
 
 Checkpoints: `1b3dcda`, `f22e0dc`, `4e9136f`, `331de80`, `c972652`, `923aade`, `90dd1c7`, `3112304`, and `7088950`. At this checkpoint, TypeScript checking, production build, and 25 Vitest tests pass.
 
-Remaining in Story 001: validated project configuration/CLI `--config` wiring; schema and direct durability/event-count hardening (including abrupt-close equivalent); safety coverage for shell-metacharacter input; and an acceptance-criteria review. MCP long-poll/UI/review/merge remain deliberately later-story work.
+Story 001 completed 2026-08-25: validated TOML configuration/CLI `--config` wiring, schema indexes and direct close/reopen durability coverage, safe opaque Git identifiers for metadata containing shell metacharacters, and typed provisioning failures. The suite now has 30 passing Vitest tests, and TypeScript/build checks pass. Remaining MVP work is tracked in GitHub issues #4–#9: MCP long-poll, configuration/task controls, messages/evidence/usage, review/merge, UI/event stream, and canonical three-agent validation.
 
 ## Non-goals (MVP)
 

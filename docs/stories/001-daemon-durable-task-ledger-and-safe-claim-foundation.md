@@ -1,6 +1,6 @@
 # Story 001: Daemon, Durable Task Ledger, and Safe Claim Foundation
 
-**Status:** In progress
+**Status:** Done
 **PRD:** [Cross-Agent Collaboration MCP](../prd/cross-agent-collaboration-mcp.md)
 **Architecture:** [Cross-Agent Collaboration MCP — First implementation story](../architecture/cross-agent-collaboration-mcp.md#first-implementation-story)
 **Estimate:** 3–5 days
@@ -26,14 +26,14 @@ This story implements the core’s local HTTP command boundary rather than the M
 - Fenced lease activation, heartbeat replay, expiry reconciliation (clean requeues; dirty blocks), and active-lease persistence across a restart.
 - Local JSON commands for session registration, task creation/detail, claim, heartbeat, and expiry reconciliation. Task detail returns only the requested task and its event history.
 - Typed operation-scoped HTTP errors, including stale-lease `409` responses, without returning task context in error payloads.
-- 25 passing Vitest tests, successful TypeScript check, and production build at the latest checkpoint.
+- 30 passing Vitest tests, successful TypeScript check, and production build at completion.
 
-### Remaining
+### Completion — 2026-08-25
 
-- Add the validated project configuration loader and wire CLI `--config` values for integration branch, lease duration, and worktree-root derivation.
-- Split/strengthen the database schema/migration surface with explicit indexes and add direct database durability/event-count coverage, including an acknowledged-mutation abrupt-close equivalent.
-- Complete safety coverage for repository/task values containing spaces or shell metacharacters, and broaden typed error coverage beyond task creation and lease fences.
-- Review the completed foundation against the full Story 001 acceptance criteria, then update this story to **Done** only when those final checks pass.
+- Added a validated minimal TOML loader and `agentbus serve --config <path>` parsing for integration branch, lease duration, and worktree-root configuration.
+- Added schema indexes plus direct WAL, event-count, close/reopen durability coverage for acknowledged mutations.
+- Derived Git branch/worktree identifiers from an opaque hash of the internal task ID, so metadata containing shell metacharacters stays data; provisioning failures now return typed operation-scoped errors.
+- Verified all acceptance criteria with 30 Vitest tests, strict TypeScript checking, and the production build.
 
 ## Affected files
 
@@ -57,17 +57,17 @@ This story implements the core’s local HTTP command boundary rather than the M
 
 ## Acceptance criteria
 
-- [ ] `[SESSION-01]` WHEN `agentbus serve --repo <path>` receives a canonical Git repository on Linux or macOS THEN it SHALL start one local daemon; WHEN `<path>` is not a repository or the platform is Windows THEN it SHALL fail with an actionable error.
-- [ ] `[SESSION-02, NFR-SEC-01, NFR-SEC-03]` WHEN the daemon starts THEN it SHALL create/open only repository-local state, enable SQLite WAL, bind its HTTP listener to loopback, and make no outbound connection.
-- [ ] `[SESSION-03, SESSION-04, NFR-COMPAT-01]` WHEN a caller registers two sessions using one Worker profile and one session using a Lead profile THEN it SHALL persist three distinct sessions with vendor-neutral role/profile data.
-- [ ] `[TASK-01, TASK-02, TASK-03, TASK-05]` WHEN the Lead creates a complete independent Worker task THEN it SHALL persist it as `unclaimed` with an append-only event; WHEN task creation is missing required handoff data or a claim targets an unsatisfied dependency THEN the service SHALL reject without state change.
-- [ ] `[TASK-04]` WHEN a caller requests a task context THEN it SHALL receive that one task and its own event history, and no foundation endpoint SHALL return a full-board dump.
-- [ ] `[CLAIM-03, CLAIM-04, WORKTREE-01, WORKTREE-02, WORKTREE-03, WORKTREE-04]` WHEN two Worker sessions concurrently claim one eligible task THEN exactly one SHALL receive a valid fenced lease and a distinct absolute core-created worktree path; WHEN provisioning fails THEN the task SHALL return to its prior claimable state and neither claimant SHALL receive authority.
-- [ ] `[CLAIM-05, CLAIM-06, NFR-REL-01]` WHEN a Worker heartbeats with its current active fence THEN the lease SHALL extend; WHEN it uses a stale, superseded, or expired fence THEN the command SHALL reject without changing task state.
-- [ ] `[CLAIM-07]` WHEN an active lease expires and its worktree is clean THEN the task SHALL become `unclaimed`; WHEN the worktree is dirty THEN the task SHALL become `blocked`; both paths SHALL retain history and worktree metadata.
-- [ ] `[EVENT-01, EVENT-02, EVENT-03, NFR-REL-02]` WHEN a mutation is accepted THEN it SHALL append a durable event and projection update atomically; WHEN its `operation_id` is retried THEN it SHALL replay the original result without a second event; WHEN the daemon restarts THEN it SHALL recover sessions, tasks, events, active leases, and worktree metadata.
-- [ ] `[NFR-SEC-02]` WHEN repository names or task metadata contain spaces or shell metacharacters THEN Git worktree provisioning SHALL pass values as argument data and SHALL not execute shell interpolation.
-- [ ] `[NFR-OBS-01]` WHEN a foundation command fails THEN the returned error and log record SHALL include an operation identifier and actionable typed reason without emitting task context or capability data.
+- [x] `[SESSION-01]` WHEN `agentbus serve --repo <path>` receives a canonical Git repository on Linux or macOS THEN it SHALL start one local daemon; WHEN `<path>` is not a repository or the platform is Windows THEN it SHALL fail with an actionable error.
+- [x] `[SESSION-02, NFR-SEC-01, NFR-SEC-03]` WHEN the daemon starts THEN it SHALL create/open only repository-local state, enable SQLite WAL, bind its HTTP listener to loopback, and make no outbound connection.
+- [x] `[SESSION-03, SESSION-04, NFR-COMPAT-01]` WHEN a caller registers two sessions using one Worker profile and one session using a Lead profile THEN it SHALL persist three distinct sessions with vendor-neutral role/profile data.
+- [x] `[TASK-01, TASK-02, TASK-03, TASK-05]` WHEN the Lead creates a complete independent Worker task THEN it SHALL persist it as `unclaimed` with an append-only event; WHEN task creation is missing required handoff data or a claim targets an unsatisfied dependency THEN the service SHALL reject without state change.
+- [x] `[TASK-04]` WHEN a caller requests a task context THEN it SHALL receive that one task and its own event history, and no foundation endpoint SHALL return a full-board dump.
+- [x] `[CLAIM-03, CLAIM-04, WORKTREE-01, WORKTREE-02, WORKTREE-03, WORKTREE-04]` WHEN two Worker sessions concurrently claim one eligible task THEN exactly one SHALL receive a valid fenced lease and a distinct absolute core-created worktree path; WHEN provisioning fails THEN the task SHALL return to its prior claimable state and neither claimant SHALL receive authority.
+- [x] `[CLAIM-05, CLAIM-06, NFR-REL-01]` WHEN a Worker heartbeats with its current active fence THEN the lease SHALL extend; WHEN it uses a stale, superseded, or expired fence THEN the command SHALL reject without changing task state.
+- [x] `[CLAIM-07]` WHEN an active lease expires and its worktree is clean THEN the task SHALL become `unclaimed`; WHEN the worktree is dirty THEN the task SHALL become `blocked`; both paths SHALL retain history and worktree metadata.
+- [x] `[EVENT-01, EVENT-02, EVENT-03, NFR-REL-02]` WHEN a mutation is accepted THEN it SHALL append a durable event and projection update atomically; WHEN its `operation_id` is retried THEN it SHALL replay the original result without a second event; WHEN the daemon restarts THEN it SHALL recover sessions, tasks, events, active leases, and worktree metadata.
+- [x] `[NFR-SEC-02]` WHEN repository names or task metadata contain spaces or shell metacharacters THEN Git worktree provisioning SHALL pass values as argument data and SHALL not execute shell interpolation.
+- [x] `[NFR-OBS-01]` WHEN a foundation command fails THEN the returned error and log record SHALL include an operation identifier and actionable typed reason without emitting task context or capability data.
 
 ## Test plan
 
