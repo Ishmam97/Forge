@@ -123,7 +123,12 @@ export class AgentBusService {
       });
     } catch (error) {
       this.#database.releaseReservedClaim(input.taskId, leaseId);
-      throw new Error(`Failed to provision worktree for task ${input.taskId}`, { cause: error });
+      throw new CommandError(
+        "WORKTREE_PROVISION_FAILED",
+        `Failed to provision worktree for task ${input.taskId}`,
+        422,
+        { cause: error },
+      );
     }
   }
 
@@ -171,7 +176,7 @@ export async function createAgentBusService(
 ): Promise<AgentBusService> {
   return new AgentBusService(
     await AgentBusDatabase.open(options.repositoryPath),
-    new GitWorktreeService(options.repositoryPath),
+    new GitWorktreeService(options.repositoryPath, options.worktreeRoot),
     options.leaseDurationMs ?? 15 * 60_000,
     options.now ?? (() => new Date()),
   );

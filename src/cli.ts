@@ -1,20 +1,11 @@
 #!/usr/bin/env node
 
 import { startAgentBusServer } from "./http/server.js";
+import { parseServeOptions } from "./cli-options.js";
 
-const [command, ...argumentsList] = process.argv.slice(2);
+const { repositoryPath, configPath } = parseServeOptions(process.argv.slice(2));
 
-if (command !== "serve") {
-  throw new Error("Usage: agentbus serve --repo <path>");
-}
-
-const repositoryFlag = argumentsList.indexOf("--repo");
-const repositoryPath = repositoryFlag >= 0 ? argumentsList[repositoryFlag + 1] : undefined;
-if (!repositoryPath) {
-  throw new Error("Usage: agentbus serve --repo <path>");
-}
-
-const server = await startAgentBusServer({ repositoryPath });
+const server = await startAgentBusServer({ repositoryPath, ...(configPath === undefined ? {} : { configPath }) });
 process.stdout.write(`AgentBus listening at ${server.url}\n`);
 
 const shutdown = async (): Promise<void> => {

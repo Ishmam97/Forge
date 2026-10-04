@@ -69,6 +69,10 @@ export class AgentBusDatabase {
         worktree_path TEXT,
         UNIQUE(task_id, lease_epoch)
       );
+      CREATE INDEX IF NOT EXISTS events_task_id_sequence_idx
+        ON events(json_extract(payload_json, '$.taskId'), sequence);
+      CREATE INDEX IF NOT EXISTS leases_active_expiry_idx
+        ON leases(active, expires_at);
     `);
     const operationColumns = database.prepare<[], { name: string }>("PRAGMA table_info(operations)").all();
     if (!operationColumns.some((column) => column.name === "command_type")) {
@@ -477,6 +481,21 @@ export class AgentBusDatabase {
   private areDependenciesSatisfied(taskId: string): boolean {
     const task = this.getTask(taskId);
     return task?.dependencies.every((dependencyId) => this.getTask(dependencyId)?.state === "merged") ?? false;
+  }
+
+  countEvents(): number {
+    return this.#database.prepare<[], { count: number }>("SELECT COUNT(*) AS count FROM events").get()?.count ?? 0;
+  }
+
+  journalMode(): string {
+    return this.#database.pragma("journal_mode", { simple: true }) as string;
+  }
+
+  indexNames(): string[] {
+    return this.#database
+      .prepare<[], { name: string }>("SELECT name FROM sqlite_master WHERE type = 'index' ORDER BY name")
+      .all()
+      .map((index) => index.name);
   }
 
   close(): void {

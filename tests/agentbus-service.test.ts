@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { CommandError } from "../src/domain/errors.js";
 import { createAgentBusService } from "../src/core/agentbus-service.js";
 import { createGitRepository, removeGitRepository, runGit } from "./support/git-repository.js";
 
@@ -556,13 +558,17 @@ describe("AgentBusService", () => {
       dependencies: [],
       eligibleRole: "worker",
     });
-    await runGit(repositoryPath, ["branch", `agentbus/${task.taskId}-1`]);
+    const generation = `${createHash("sha256").update(task.taskId).digest("hex").slice(0, 24)}-1`;
+    await runGit(repositoryPath, ["branch", `agentbus/${generation}`]);
 
     await expect(service.claimTask({
       operationId: "provision-failure-claim",
       sessionId: worker.sessionId,
       taskId: task.taskId,
-    })).rejects.toThrow(`Failed to provision worktree for task ${task.taskId}`);
+    })).rejects.toMatchObject({
+      code: "WORKTREE_PROVISION_FAILED",
+      statusCode: 422,
+    } satisfies Partial<CommandError>);
     await expect(service.getTaskContext(task.taskId)).resolves.toMatchObject({ state: "unclaimed" });
 
     await expect(service.claimTask({

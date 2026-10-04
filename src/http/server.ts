@@ -2,6 +2,7 @@ import { execFile as execFileCallback } from "node:child_process";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import Fastify from "fastify";
+import { loadAgentBusConfig } from "../config.js";
 import { createAgentBusService, type AgentBusService } from "../core/agentbus-service.js";
 import { CommandError } from "../domain/errors.js";
 import type {
@@ -24,6 +25,7 @@ function operationIdFromBody(body: unknown): string | undefined {
 export interface StartAgentBusServerOptions {
   repositoryPath: string;
   port?: number;
+  configPath?: string;
   leaseDurationMs?: number;
   now?: () => Date;
 }
@@ -67,6 +69,10 @@ export async function startAgentBusServer(
   }
   const service = await createAgentBusService({
     repositoryPath,
+    ...(await loadAgentBusConfig({
+      repositoryPath,
+      ...(options.configPath === undefined ? {} : { configPath: options.configPath }),
+    })),
     ...(options.leaseDurationMs === undefined ? {} : { leaseDurationMs: options.leaseDurationMs }),
     ...(options.now === undefined ? {} : { now: options.now }),
   });

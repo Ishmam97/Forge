@@ -23,4 +23,15 @@ describe("GitWorktreeService", () => {
     await expect(access(first.worktreePath)).resolves.toBeUndefined();
     await expect(access(second.worktreePath)).resolves.toBeUndefined();
   });
+
+  it("treats task metadata with shell metacharacters as data", async () => {
+    const repositoryPath = await createGitRepository();
+    repositories.push(repositoryPath);
+    const git = new GitWorktreeService(repositoryPath);
+
+    const worktree = await git.provision("task; $(touch injected)", 1);
+
+    await expect(access(worktree.worktreePath)).resolves.toBeUndefined();
+    await expect(access(`${repositoryPath}/injected`)).rejects.toThrow();
+  });
 });

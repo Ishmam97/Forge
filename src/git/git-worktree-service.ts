@@ -1,4 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -9,13 +10,15 @@ export class GitWorktreeService {
   readonly #repositoryPath: string;
   readonly #worktreeRoot: string;
 
-  constructor(repositoryPath: string) {
+  constructor(repositoryPath: string, worktreeRoot?: string) {
     this.#repositoryPath = resolve(repositoryPath);
-    this.#worktreeRoot = join(dirname(this.#repositoryPath), ".agentbus-worktrees", basename(this.#repositoryPath));
+    this.#worktreeRoot = worktreeRoot === undefined
+      ? join(dirname(this.#repositoryPath), ".agentbus-worktrees", basename(this.#repositoryPath))
+      : resolve(worktreeRoot);
   }
 
   async provision(taskId: string, leaseEpoch: number): Promise<{ branch: string; worktreePath: string }> {
-    const claimGeneration = `${taskId}-${leaseEpoch}`;
+    const claimGeneration = `${createHash("sha256").update(taskId).digest("hex").slice(0, 24)}-${leaseEpoch}`;
     const branch = `agentbus/${claimGeneration}`;
     const worktreePath = join(this.#worktreeRoot, claimGeneration);
     await mkdir(this.#worktreeRoot, { recursive: true });

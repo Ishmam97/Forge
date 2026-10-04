@@ -19,6 +19,7 @@ export interface Session {
 export interface AgentBusServiceOptions {
   repositoryPath: string;
   leaseDurationMs?: number;
+  worktreeRoot?: string;
   now?: () => Date;
 }
 
