@@ -4,6 +4,8 @@ https://www.ishmamsolaiman.com/forge
 
 A light library of software-engineering agents, workflows and skills for **Claude Code** and **Codex**. Pull in everything, or just the pieces you want.
 
+**Landing page:** https://www.ishmamsolaiman.com/forge
+
 - **20 agents** — analyst, pm, architect, planner, implementer, test-author, code-reviewer, security-auditor, perf-auditor, debugger, refactorer, docs-writer, repo-mapper, migration-planner, release-manager, committer, data-modeler, devils-advocate, tech-researcher, learnings-researcher
 - **22 workflows** — `/brainstorm`, `/implement`, `/review`, `/ship`, `/adr`, `/greenfield:*`, `/brownfield:*`, and more
 - **3 skills** — `test-driven-development`, `systematic-debugging`, `skill-authoring`
@@ -49,6 +51,6 @@ Typed artifacts over chat; an architect → implementer split; self-contained st
 
 ## Not included
 
-The full [Forge](https://github.com/Ishmam97/Forge_full) toolkit adds an Obsidian memory vault, session hooks and the `agentbus` multi-agent coordinator. This library leaves those out to stay small.
+The full Forge toolkit (in development) adds an Obsidian memory vault, session hooks and the `agentbus` multi-agent coordinator. This library leaves those out to stay small.
 
 > Generated from the full repo by `scripts/build-light.mjs`. Edit the source there, not here.
