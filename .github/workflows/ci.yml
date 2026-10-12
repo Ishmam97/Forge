@@ -1,0 +1,19 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Installer smoke test
+        run: |
+          node bin/forge-swe.mjs list
+          d=$(mktemp -d) && cd "$d"
+          node "$GITHUB_WORKSPACE/bin/forge-swe.mjs" init
+          test -f .claude/agents/architect.md && test -f .codex/agents/architect.toml && test -f CLAUDE.md
+      - name: Manifests are valid JSON
+        run: node -e "for (const f of ['.claude-plugin/plugin.json','.claude-plugin/marketplace.json','package.json']) JSON.parse(require('fs').readFileSync(f,'utf8'))"
+      - name: No leftover vault references
+        run: "! grep -rniE 'obsidian|mcp__obsidian' agents commands skills templates"

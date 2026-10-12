@@ -15,17 +15,17 @@ A light library of software-engineering agents, workflows and skills for **Claud
 ### Claude Code plugin
 
 ```
-/plugin marketplace add <owner>/forge-swe
+/plugin marketplace add Ishmam97/Forge
 /plugin install forge-swe@forge-swe
 ```
 
 ### Installer (Claude Code and Codex, pick and choose)
 
 ```bash
-npx forge-swe list                       # what's available
-npx forge-swe add implementer debugger   # specific items + their dependencies
-npx forge-swe add implement --claude     # a workflow, Claude Code only
-npx forge-swe init                       # everything
+npx github:Ishmam97/Forge list                       # what's available
+npx github:Ishmam97/Forge add implementer debugger   # specific items + their dependencies
+npx github:Ishmam97/Forge add implement --claude     # a workflow, Claude Code only
+npx github:Ishmam97/Forge init                       # everything
 ```
 
 `add` follows references, so `implement` also pulls in `implementer`, `architect`, `test-author`, the `test-driven-development` skill and the templates they use. Existing files are never overwritten unless you pass `--force`. Files land in `.claude/` (Claude Code) and `.codex/` + `.agents/skills/` (Codex), templates in `templates/`.
@@ -49,6 +49,6 @@ Typed artifacts over chat; an architect → implementer split; self-contained st
 
 ## Not included
 
-The full [Forge](https://github.com/OWNER/agentic_swe) toolkit adds an Obsidian memory vault, session hooks and the `agentbus` multi-agent coordinator. This library leaves those out to stay small.
+The full [Forge](https://github.com/Ishmam97/Forge_full) toolkit adds an Obsidian memory vault, session hooks and the `agentbus` multi-agent coordinator. This library leaves those out to stay small.
 
 > Generated from the full repo by `scripts/build-light.mjs`. Edit the source there, not here.

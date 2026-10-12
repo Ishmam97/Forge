@@ -3,8 +3,40 @@
   "version": "0.1.0",
   "description": "Light SWE agent, workflow and skill library for Claude Code and Codex.",
   "type": "module",
-  "bin": { "forge-swe": "bin/forge-swe.mjs" },
-  "files": ["bin", "agents", "commands", "skills", "templates", "contexts", "codex", "CLAUDE.snippet.md", ".claude-plugin"],
-  "engines": { "node": ">=18" },
-  "license": "MIT"
+  "bin": {
+    "forge-swe": "bin/forge-swe.mjs"
+  },
+  "files": [
+    "bin",
+    "agents",
+    "commands",
+    "skills",
+    "templates",
+    "contexts",
+    "codex",
+    "CLAUDE.snippet.md",
+    ".claude-plugin"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ishmam97/Forge.git"
+  },
+  "homepage": "https://github.com/Ishmam97/Forge#readme",
+  "bugs": {
+    "url": "https://github.com/Ishmam97/Forge/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "agents",
+    "subagents",
+    "skills",
+    "software-engineering",
+    "workflows"
+  ],
+  "author": "Ishmam Solaiman"
 }
