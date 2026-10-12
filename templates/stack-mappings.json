@@ -1,0 +1,157 @@
+{
+  "$schema-comment": "Map detected project stacks to recommended .claude/settings.json permissions and to common build/test/lint commands. Used by /brownfield:onboard and repo-mapper to suggest scaffold settings after stack detection. Pared to the top 8 stacks; extend as needed.",
+  "stacks": {
+    "node-typescript": {
+      "indicators": ["tsconfig.json", "package.json"],
+      "permissions_allow": [
+        "Bash(npm install:*)",
+        "Bash(npm run *)",
+        "Bash(npm test:*)",
+        "Bash(npx tsc:*)",
+        "Bash(npx eslint:*)",
+        "Bash(node *)"
+      ],
+      "permissions_deny": [
+        "Bash(npm publish:*)",
+        "Bash(rm -rf node_modules:*)"
+      ],
+      "commands": {
+        "install": "npm install",
+        "build": "npm run build",
+        "test": "npm test",
+        "lint": "npm run lint",
+        "format": "npx prettier --write ."
+      }
+    },
+    "python": {
+      "indicators": ["pyproject.toml", "requirements.txt", "setup.py"],
+      "permissions_allow": [
+        "Bash(python:*)",
+        "Bash(python3:*)",
+        "Bash(pytest:*)",
+        "Bash(pip install:*)",
+        "Bash(ruff:*)",
+        "Bash(mypy:*)",
+        "Bash(uv:*)"
+      ],
+      "permissions_deny": [
+        "Bash(pip uninstall:*)"
+      ],
+      "commands": {
+        "install": "pip install -e .",
+        "test": "pytest",
+        "lint": "ruff check .",
+        "format": "ruff format .",
+        "typecheck": "mypy ."
+      }
+    },
+    "go": {
+      "indicators": ["go.mod", "go.sum"],
+      "permissions_allow": [
+        "Bash(go build:*)",
+        "Bash(go test:*)",
+        "Bash(go run:*)",
+        "Bash(go vet:*)",
+        "Bash(go mod *)",
+        "Bash(gofmt:*)",
+        "Bash(golangci-lint:*)"
+      ],
+      "permissions_deny": [],
+      "commands": {
+        "build": "go build ./...",
+        "test": "go test ./...",
+        "lint": "golangci-lint run",
+        "format": "gofmt -w ."
+      }
+    },
+    "rust": {
+      "indicators": ["Cargo.toml"],
+      "permissions_allow": [
+        "Bash(cargo build:*)",
+        "Bash(cargo test:*)",
+        "Bash(cargo run:*)",
+        "Bash(cargo check:*)",
+        "Bash(cargo clippy:*)",
+        "Bash(cargo fmt:*)"
+      ],
+      "permissions_deny": [
+        "Bash(cargo publish:*)"
+      ],
+      "commands": {
+        "build": "cargo build",
+        "test": "cargo test",
+        "lint": "cargo clippy --all-targets -- -D warnings",
+        "format": "cargo fmt"
+      }
+    },
+    "next-react": {
+      "indicators": ["next.config.js", "next.config.mjs", "next.config.ts"],
+      "permissions_allow": [
+        "Bash(npm run dev:*)",
+        "Bash(npm run build:*)",
+        "Bash(npm run start:*)",
+        "Bash(npm run lint:*)",
+        "Bash(npx next *)"
+      ],
+      "permissions_deny": [],
+      "commands": {
+        "dev": "npm run dev",
+        "build": "npm run build",
+        "test": "npm test",
+        "lint": "npm run lint"
+      }
+    },
+    "django-python": {
+      "indicators": ["manage.py"],
+      "permissions_allow": [
+        "Bash(python manage.py runserver:*)",
+        "Bash(python manage.py migrate:*)",
+        "Bash(python manage.py makemigrations:*)",
+        "Bash(python manage.py test:*)",
+        "Bash(pytest:*)"
+      ],
+      "permissions_deny": [
+        "Bash(python manage.py flush:*)",
+        "Bash(python manage.py reset_db:*)"
+      ],
+      "commands": {
+        "dev": "python manage.py runserver",
+        "migrate": "python manage.py migrate",
+        "test": "python manage.py test"
+      }
+    },
+    "fastapi-python": {
+      "indicators": ["main.py", "app.py"],
+      "indicator_imports": ["fastapi"],
+      "permissions_allow": [
+        "Bash(uvicorn *)",
+        "Bash(pytest:*)",
+        "Bash(ruff:*)"
+      ],
+      "permissions_deny": [],
+      "commands": {
+        "dev": "uvicorn main:app --reload",
+        "test": "pytest",
+        "lint": "ruff check ."
+      }
+    },
+    "java-maven": {
+      "indicators": ["pom.xml"],
+      "permissions_allow": [
+        "Bash(mvn compile:*)",
+        "Bash(mvn test:*)",
+        "Bash(mvn package:*)",
+        "Bash(mvn verify:*)"
+      ],
+      "permissions_deny": [
+        "Bash(mvn deploy:*)"
+      ],
+      "commands": {
+        "build": "mvn compile",
+        "test": "mvn test",
+        "package": "mvn package"
+      }
+    }
+  },
+  "usage_note": "Detection is best-effort. Multiple stacks can match (e.g. node-typescript + next-react); merge their allow lists. When suggesting settings.json edits, present the diff and let the user accept."
+}

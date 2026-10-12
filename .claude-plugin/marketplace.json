@@ -1,0 +1,7 @@
+{
+  "name": "forge-swe",
+  "owner": { "name": "Ishmam Solaiman" },
+  "plugins": [
+    { "name": "forge-swe", "source": "./", "description": "SWE agents, workflows and skills for Claude Code." }
+  ]
+}
